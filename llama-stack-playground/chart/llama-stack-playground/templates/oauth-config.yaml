@@ -1,0 +1,32 @@
+{{- if .Values.keycloak.enabled }}
+# OAuth proxy configuration for Keycloak
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth-proxy-config
+  namespace: {{ .Values.namespace | default "llama-stack" }}
+data:
+  oauth-proxy.yaml: |
+    # OAuth proxy settings for Keycloak OIDC
+    provider: keycloak-oidc
+    upstream: http://localhost:8501
+    http_address: "0.0.0.0:8443"
+    # Forward JWT tokens to Streamlit
+    pass_access_token: "true"
+    pass_authorization_header: "true"
+    set_authorization_header: "true"
+    # Keycloak configuration
+    oidc_issuer_url: "{{ .Values.keycloak.url }}/realms/{{ .Values.keycloak.realm }}"
+    client_id: "{{ .Values.keycloak.clientId }}"
+    cookie_secret: "{{ .Values.keycloak.cookieSecret }}"
+    # TLS configuration
+    tls_cert_file: /etc/tls/private/tls.crt
+    tls_key_file: /etc/tls/private/tls.key
+    # Skip static assets
+    skip_auth_regex: "^/static"
+    # Cookie configuration
+    cookie_secure: "true"
+    cookie_httponly: "true"
+    cookie_samesite: "lax"
+{{- end }}
+

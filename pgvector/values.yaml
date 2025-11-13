@@ -1,0 +1,50 @@
+# Default values for pgvector.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ankane/pgvector
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 5432
+
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+
+env:
+  POSTGRES_USER: ""
+  POSTGRES_DB: ""
+
+secrets:
+  # Name of the secret to use for the PostgreSQL password.
+  # If empty, a new secret will be created with a random password.
+  existingSecret: ""
+  # The key in the secret that contains the password
+  passwordKey: "password"
+  # If creating a new secret, this password will be used.
+  # It's recommended to use existingSecret or let Helm generate a random password.
+  password: ""
+
+postInstall:
+  createVectorExtension: true 

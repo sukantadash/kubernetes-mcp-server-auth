@@ -1,0 +1,6 @@
+llama-stack==0.2.16
+llama-stack-client==0.2.16
+pandas
+flask
+openpyxl
+gunicorn

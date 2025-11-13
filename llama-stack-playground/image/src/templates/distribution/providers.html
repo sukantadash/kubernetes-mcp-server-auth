@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}API Providers - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>🔍 API Providers</h1>
+    
+    {% for api, providers_list in api_to_providers.items() %}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5>{{ api }}</h5>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr>
+                        {% if providers_list %}
+                            {% for key in providers_list[0].keys() %}
+                            <th>{{ key }}</th>
+                            {% endfor %}
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for provider in providers_list %}
+                    <tr>
+                        {% for value in provider.values() %}
+                        <td>{{ value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+

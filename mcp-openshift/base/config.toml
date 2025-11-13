@@ -1,0 +1,49 @@
+# Kubernetes MCP Server Configuration
+# This is a TOML configuration file for the kubernetes-mcp-server
+
+# Server port (supports both SSE and Streamable HTTP)
+port = "8000"
+
+# Path to kubeconfig file (mounted from secret)
+kubeconfig = "/etc/kubeconfig/config"
+
+# Cluster provider strategy: how the server finds clusters
+# Options:
+#   - "kubeconfig": Multi-cluster support using kubeconfig contexts (default when kubeconfig is set)
+#   - "in-cluster": Single cluster using in-cluster config (for pods running inside Kubernetes)
+#   - "disabled": Single cluster, multi-cluster support disabled
+# Default: Auto-detected (if kubeconfig is set, defaults to "kubeconfig")
+cluster_provider_strategy = "kubeconfig"
+
+# Logging level (0-9, where 0 is least verbose and 9 is most verbose)
+log_level = 2
+
+# Output format for list operations: "table" or "yaml"
+list_output = "table"
+
+# Enable multi-cluster support (default: true)
+# When enabled, tools will accept a 'context' parameter to target specific clusters
+# Set to false to disable multi-cluster and use only the default context
+
+# Toolsets to enable (available: core, config, helm)
+toolsets = ["core", "config", "helm"]
+
+# Read-only mode - if true, only read-only operations are allowed
+read_only = false
+
+# Disable destructive operations - if true, disable delete/update operations
+disable_destructive = false
+
+# OAuth/OIDC Configuration
+# require_oauth = false  # Default is false, using kubeconfig authentication
+# When require_oauth = false, OAuth-related settings (authorization_url, oauth_audience, validate_token) cannot be set
+# 
+# To enable OAuth with JWT tokens, set:
+# require_oauth = true
+# authorization_url = "https://keycloak-admin.apps.cluster-95nrt.95nrt.sandbox5429.opentlc.com/realms/llama-realm"
+# oauth_audience = "account"
+# validate_token = false
+
+# SSE base URL (optional, for public-facing deployments)
+# sse_base_url = "https://example.com:8000"
+

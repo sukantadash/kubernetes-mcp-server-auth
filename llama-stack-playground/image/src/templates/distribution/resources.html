@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Resources - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>Resources</h1>
+    
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'models' %}active{% endif %}" href="{{ url_for('distribution.resources', type='models') }}">Models</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'vector_dbs' %}active{% endif %}" href="{{ url_for('distribution.resources', type='vector_dbs') }}">Vector Databases</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'shields' %}active{% endif %}" href="{{ url_for('distribution.resources', type='shields') }}">Shields</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'scoring_functions' %}active{% endif %}" href="{{ url_for('distribution.resources', type='scoring_functions') }}">Scoring Functions</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'datasets' %}active{% endif %}" href="{{ url_for('distribution.resources', type='datasets') }}">Datasets</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if resource_type == 'benchmarks' %}active{% endif %}" href="{{ url_for('distribution.resources', type='benchmarks') }}">Benchmarks</a>
+        </li>
+    </ul>
+    
+    <div class="card">
+        <div class="card-body">
+            {% if resource_type == 'models' and models %}
+            <pre>{{ models|tojson(indent=2) }}</pre>
+            {% elif resource_type == 'vector_dbs' and vector_dbs %}
+            <pre>{{ vector_dbs|tojson(indent=2) }}</pre>
+            {% elif resource_type == 'shields' and shields %}
+            <pre>{{ shields|tojson(indent=2) }}</pre>
+            {% elif resource_type == 'scoring_functions' and scoring_functions %}
+            <pre>{{ scoring_functions|tojson(indent=2) }}</pre>
+            {% elif resource_type == 'datasets' and datasets %}
+            <pre>{{ datasets|tojson(indent=2) }}</pre>
+            {% elif resource_type == 'benchmarks' and benchmarks %}
+            <pre>{{ benchmarks|tojson(indent=2) }}</pre>
+            {% else %}
+            <p>No {{ resource_type }} available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,32 @@
+apiVersion: config.openshift.io/v1
+kind: Authentication
+metadata:
+  name: cluster
+spec:
+  oidcProviders:
+    - claimMappings:
+        groups:
+          claim: groups
+          prefix: ''
+        username:
+          claim: preferred_username 
+          prefixPolicy: NoPrefix
+      issuer:
+        audiences: 
+          - openshift-console
+          - openshift-cli
+          - openshift
+        issuerURL: $RHBK_HOST/realms/openshift
+        issuerCertificateAuthority:
+          name: keycloak-oidc-ca
+      name: 'rhbk-external-auth'
+      oidcClients:
+        - clientID: openshift-cli
+          componentName: cli
+          componentNamespace: openshift-console
+        - clientID: openshift-console
+          clientSecret:
+            name: keycloak-client-openshift-console-secret
+          componentName: console
+          componentNamespace: openshift-console
+  type: OIDC

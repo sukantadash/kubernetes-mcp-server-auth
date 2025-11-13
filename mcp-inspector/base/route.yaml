@@ -1,0 +1,17 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mcp-inspector
+  namespace: mcp-inspector
+  labels:
+    app: mcp-inspector
+spec:
+  to:
+    kind: Service
+    name: mcp-inspector
+  port:
+    targetPort: inspector
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

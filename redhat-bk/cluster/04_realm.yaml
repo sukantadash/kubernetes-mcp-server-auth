@@ -1,0 +1,195 @@
+#define environment variables
+#OPENSHIFT_SECRET=YOUR_OPENSHIFT_CLIENT_SECRET_HERE
+#OPENSHIFT_CONSOLE_SECRET=YOUR_CONSOLE_SECRET_HERE
+#MCP_SERVER_SECRET=YOUR_MCP_SERVER_SECRET_HERE
+
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-client-openshift-secret
+  namespace: openshift-config
+type: Opaque
+stringData:
+  clientSecret: $OPENSHIFT_SECRET
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-client-openshift-console-secret
+  namespace: openshift-config
+type: Opaque
+stringData:
+  clientSecret: $OPENSHIFT_CONSOLE_SECRET
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-client-mcp-server-secret
+  namespace: openshift-config
+type: Opaque
+stringData:
+  clientSecret: $MCP_SERVER_SECRET
+---
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: openshift-realm-import
+  namespace: redhat-keycloak
+spec:
+  keycloakCRName: keycloak
+  realm:
+    realm: "openshift"
+    enabled: true
+    clientScopes:
+      - name: "groups"
+        description: "Provides group membership"
+        protocol: "openid-connect"
+        attributes:
+          "default.client.scope": "true"
+          "include.in.token.scope": "true"
+        protocolMappers:
+          - name: "groups"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-group-membership-mapper"
+            config:
+              "full.path": "false"
+              "claim.name": "groups"
+              "access.token.claim": "true"
+              "id.token.claim": "true"
+      - name: "mcp-server"
+        description: "Audience for the MCP Server"
+        protocol: "openid-connect"
+        attributes:
+          "include.in.token.scope": "true"
+        protocolMappers:
+          - name: "mcp-server-audience"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-audience-mapper"
+            config:
+              "included.client.audience": "mcp-server"
+              "access.token.claim": "true"
+      - name: "mcp:openshift"
+        description: "Audience for the OpenShift API"
+        protocol: "openid-connect"
+        attributes:
+          "include.in.token.scope": "true"
+        protocolMappers:
+          # This mapper includes our audience fix
+          - name: "openshift-api-audience"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-audience-mapper"
+            config:
+              "included.custom.audience": "openshift"
+              "access.token.claim": "true"
+    clients:
+      - clientId: "mcp-client"
+        name: "MCP Client"
+        publicClient: false
+        secret: $MCP_CLIENT_SECRET
+        directAccessGrantsEnabled: true
+        redirectUris: ["*"]
+        optionalClientScopes: ["mcp-server"]
+      - clientId: "mcp-server"
+        name: "MCP Server"
+        publicClient: false
+        enabled: true
+        secret: $MCP_SERVER_SECRET
+        attributes:
+          "standard.token.exchange.enabled": "true"
+        redirectUris: ["*"]
+        defaultClientScopes: ["groups"]
+        optionalClientScopes: ["mcp:openshift"]
+      - clientId: "openshift"
+        name: "OpenShift API"
+        publicClient: false
+        enabled: true
+        secret: $OPENSHIFT_SECRET
+        protocol: "openid-connect"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        redirectUris: ["*"]
+        defaultClientScopes: ["profile", "email", "groups"]
+        optionalClientScopes: []
+        protocolMappers:
+          - name: "username"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-usermodel-property-mapper"
+            config:
+              "user.attribute": "username"
+              "claim.name": "preferred_username"
+              "jsonType.label": "String"
+              "id.token.claim": "true"
+              "access.token.claim": "true"
+              "userinfo.token.claim": "true"
+          - name: "email"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-usermodel-property-mapper"
+            config:
+              "user.attribute": "email"
+              "claim.name": "email"
+              "jsonType.label": "String"
+              "id.token.claim": "true"
+              "access.token.claim": "true"
+              "userinfo.token.claim": "true"
+          - name: "groups"
+            protocol: "openid-connect"
+            protocolMapper: "oidc-group-membership-mapper"
+            config:
+              "full.path": "false"
+              "claim.name": "groups"
+              "id.token.claim": "true"
+              "access.token.claim": "true"
+              "userinfo.token.claim": "true"
+      - clientId: "openshift-cli"
+        name: "OpenShift CLI"
+        publicClient: true
+        enabled: true
+        protocol: "openid-connect"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        redirectUris: 
+          - "http://localhost"
+        defaultClientScopes: ["groups"]
+      - clientId: "openshift-console"
+        name: "OpenShift Console (openshift-console)"
+        publicClient: false
+        enabled: true
+        secret: $OPENSHIFT_CONSOLE_SECRET
+        protocol: "openid-connect"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        redirectUris: 
+          - "https://console-openshift-console.apps.${CLUSTER_NAME}/auth/callback"
+        defaultClientScopes: ["groups"]
+    groups:
+      - name: "openshift_admins"
+        path: "/openshift_admins"
+      - name: "openshift_developers"
+        path: "/openshift_developers"
+    users:
+      - username: "testadmin"
+        enabled: true
+        email: "testadmin@example.com"
+        firstName: "Test"
+        lastName: "Admin"
+        credentials:
+          - type: "password"
+            value: "dummy" # Default password
+            temporary: false
+        groups:
+          - "openshift_admins"
+          
+      - username: "testdeveloper"
+        enabled: true
+        email: "testdeveloper@example.com"
+        firstName: "Test"
+        lastName: "Developer"
+        credentials:
+          - type: "password"
+            value: "dummy" # Default password
+            temporary: false
+        groups:
+          - "openshift_developers"

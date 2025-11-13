@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluations (Scoring) - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>📊 Evaluations (Scoring)</h1>
+    
+    <div class="card mb-3">
+        <div class="card-header">Upload Dataset</div>
+        <div class="card-body">
+            <input type="file" class="form-control" id="dataset-file" accept=".csv,.xlsx,.xls">
+            <button class="btn btn-primary mt-2" id="upload-btn">Upload</button>
+        </div>
+    </div>
+    
+    <div id="dataset-preview" style="display:none;">
+        <div class="card mb-3">
+            <div class="card-header">Dataset Preview</div>
+            <div class="card-body">
+                <div id="preview-table"></div>
+                <p>Total rows: <span id="row-count">0</span></p>
+            </div>
+        </div>
+        
+        <div class="card mb-3">
+            <div class="card-header">Select Scoring Functions</div>
+            <div class="card-body">
+                <select class="form-select mb-3" id="scoring-functions" multiple>
+                    {% for sf_id, sf in scoring_functions.items() %}
+                    <option value="{{ sf_id }}">{{ sf_id }}</option>
+                    {% endfor %}
+                </select>
+                <div id="scoring-params"></div>
+                <label class="form-label">Number of rows to evaluate: <span id="num-rows-val">0</span></label>
+                <input type="range" class="form-range" id="num-rows" min="1" max="1" step="1" value="1">
+                <button class="btn btn-success mt-3" id="run-eval-btn">Run Evaluation</button>
+            </div>
+        </div>
+        
+        <div id="results-container" style="display:none;">
+            <div class="card">
+                <div class="card-header">Evaluation Results</div>
+                <div class="card-body">
+                    <div id="progress-bar-container" class="mb-3"></div>
+                    <div id="results-table"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let datasetData = null;
+let totalRows = 0;
+
+document.getElementById('upload-btn').addEventListener('click', async () => {
+    const file = document.getElementById('dataset-file').files[0];
+    if (!file) {
+        alert('Please select a file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('{{ url_for("evaluations.app_eval") }}', {
+        method: 'POST',
+        body: formData
+    });
+    const result = await response.json();
+    
+    if (result.success) {
+        datasetData = result.preview;
+        totalRows = result.row_count;
+        document.getElementById('row-count').textContent = totalRows;
+        document.getElementById('num-rows').max = totalRows;
+        document.getElementById('num-rows').value = totalRows;
+        document.getElementById('num-rows-val').textContent = totalRows;
+        
+        // Show preview table
+        const previewDiv = document.getElementById('preview-table');
+        previewDiv.innerHTML = '<table class="table"><thead><tr>' + 
+            result.columns.map(c => `<th>${c}</th>`).join('') + 
+            '</tr></thead><tbody>' +
+            result.preview.map(row => '<tr>' + 
+                result.columns.map(c => `<td>${row[c] || ''}</td>`).join('') + 
+                '</tr>').join('') +
+            '</tbody></table>';
+        
+        document.getElementById('dataset-preview').style.display = 'block';
+    } else {
+        alert('Error: ' + result.error);
+    }
+});
+
+document.getElementById('num-rows').addEventListener('input', (e) => {
+    document.getElementById('num-rows-val').textContent = e.target.value;
+});
+
+document.getElementById('run-eval-btn').addEventListener('click', async () => {
+    const selectedFunctions = Array.from(document.getElementById('scoring-functions').selectedOptions).map(o => o.value);
+    if (selectedFunctions.length === 0) {
+        alert('Please select at least one scoring function');
+        return;
+    }
+    
+    const numRows = parseInt(document.getElementById('num-rows').value);
+    
+    document.getElementById('results-container').style.display = 'block';
+    const progressContainer = document.getElementById('progress-bar-container');
+    progressContainer.innerHTML = '<div class="progress"><div class="progress-bar" id="progress-bar" style="width:0%">0%</div></div>';
+    
+    const response = await fetch('{{ url_for("evaluations.app_eval") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            action: 'run_evaluation',
+            selected_scoring_functions: selectedFunctions,
+            scoring_params: {},
+            num_rows: numRows
+        })
+    });
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const resultsDiv = document.getElementById('results-table');
+    let allResults = [];
+    
+    function readChunk() {
+        reader.read().then(({done, value}) => {
+            if (done) return;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.substring(6));
+                        if (data.progress !== undefined) {
+                            const progressBar = document.getElementById('progress-bar');
+                            const percent = Math.round(data.progress * 100);
+                            progressBar.style.width = percent + '%';
+                            progressBar.textContent = percent + '%';
+                        }
+                        if (data.done && data.results) {
+                            allResults = data.results;
+                            const columns = data.columns;
+                            resultsDiv.innerHTML = '<table class="table"><thead><tr>' + 
+                                columns.map(c => `<th>${c}</th>`).join('') + 
+                                '</tr></thead><tbody>' +
+                                allResults.map(row => '<tr>' + 
+                                    columns.map(c => `<td>${JSON.stringify(row[c])}</td>`).join('') + 
+                                    '</tr>').join('') +
+                                '</tbody></table>';
+                        }
+                    } catch (e) {}
+                }
+            }
+            readChunk();
+        });
+    }
+    readChunk();
+});
+</script>
+{% endblock %}
+

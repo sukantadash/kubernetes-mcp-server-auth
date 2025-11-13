@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocp-mcp-server-config
+data:
+  config.toml: |
+    # Kubernetes MCP Server Configuration
+    port = "8000"
+    cluster_provider_strategy = "in-cluster"
+    
+    log_level = 9
+    list_output = "table"
+    toolsets = ["core", "config", "helm"]
+    read_only = false
+    disable_destructive = false
+    
+    # OAuth/OIDC Configuration
+    require_oauth = true
+    authorization_url = "https://keycloak-admin.apps.${CLUSTER_NAME}/realms/openshift"
+    oauth_scopes = ["openid", "mcp-server"]
+    sts_client_id = "mcp-server"
+    sts_client_secret = ${MCP_SERVER_SECRET}
+    sts_audience = "openshift"
+    sts_scopes = ["mcp:openshift"]
+    certificate_authority = "/etc/pki/keycloak-ca/ca.crt"
+    oauth_audience = "account"
+    validate_token = false
+

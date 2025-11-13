@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-inspector
+  namespace: mcp-inspector
+  labels:
+    app: mcp-inspector
+spec:
+  selector:
+    app: mcp-inspector
+  ports:
+  - name: inspector
+    port: 80
+    targetPort: 6274
+    protocol: TCP
+  - name: inspector-ws
+    port: 6277
+    targetPort: 6277
+    protocol: TCP
+  type: ClusterIP

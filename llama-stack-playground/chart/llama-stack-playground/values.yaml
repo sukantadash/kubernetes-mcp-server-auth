@@ -1,0 +1,163 @@
+# Default values for llama-stack-playground
+replicaCount: 1
+
+image:
+  repository: quay.io/sudash/llama-stack-playground-new  # Update with your image registry
+  tag: "latest"
+  pullPolicy: Always
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"llama-stack-playground"}}'
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  # runAsUser: 1001
+  # Remove specific UID/GID to let OpenShift assign them
+  # fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  # Remove specific UID/GID to let OpenShift assign them
+  # runAsUser: 1001
+  # runAsGroup: 1001
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 4180  # OAuth proxy HTTP port
+  annotations: {}
+
+route:
+  enabled: true
+  annotations: {}
+  host: ""
+  tls:
+    enabled: true
+    termination: edge  # Edge termination when using HTTP oauth2-proxy
+    insecureEdgeTerminationPolicy: Redirect
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: llama-stack-playground.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    #cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Playground configuration
+playground:
+  # Llama Stack backend URL
+  llamaStackUrl: "http://llamastack-with-config-service:8321"
+  # Default model to use
+  defaultModel: "llama-4-scout-17b-16e-w4a16"
+  # Flask secret key (optional - can be set via secret instead)
+  flaskSecretKey: ""  # Leave empty to use secret, or set here for dev/testing
+  # Enable/disable features
+  enableChat: true
+  enableAgents: true
+  enableTools: true
+
+# Environment variables
+env:
+  # Flask/Python configuration
+  PYTHONUNBUFFERED: "1"
+  FLASK_ENV: "production"
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: openshift-ingress
+      ports:
+      - protocol: TCP
+        port: 8501
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: llama-stack
+      ports:
+      - protocol: TCP
+        port: 80
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Keycloak OAuth Proxy Configuration
+keycloak:
+  # Enable Keycloak authentication
+  enabled: true
+  url: "https://keycloak-admin.apps.${CLUSTER_NAME}"
+  realm: "openshift"
+  # ✅ Use single client for all components
+  clientId: "mcp-client"
+  clientSecret: ${MCP_CLIENT_SECRET}  # Replace with actual secret or use Helm secrets
+  cookieSecret: ${COOKIE_SECRET}  # Replace with actual secret or use Helm secrets
+  scope: "openid profile email mcp-server"
+  # OAuth2 callback URL - should match your Keycloak client configuration
+  # Update this with your actual route URL after deployment
+  # Format: https://your-route-hostname
+  redirectUrl: "https://llama-stack-playground-llama-stack.apps.${CLUSTER_NAME}"
+
+# Namespace
+namespace: "llama-stack"

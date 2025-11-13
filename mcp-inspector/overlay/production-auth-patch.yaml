@@ -1,0 +1,20 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-inspector
+  namespace: mcp-inspector
+spec:
+  template:
+    spec:
+      containers:
+      - name: mcp-inspector
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "6274"
+        - name: PROXY_PORT
+          value: "6277"
+        # Authentication enabled - remove DANGEROUSLY_OMIT_AUTH
+        # Users will need to get the session token from pod logs

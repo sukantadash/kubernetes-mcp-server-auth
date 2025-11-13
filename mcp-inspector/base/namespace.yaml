@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-inspector
+  labels:
+    name: mcp-inspector

@@ -1,0 +1,86 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-inspector
+  namespace: mcp-inspector
+  labels:
+    app: mcp-inspector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-inspector
+  template:
+    metadata:
+      labels:
+        app: mcp-inspector
+    spec:
+      serviceAccountName: mcp-inspector
+      volumes:
+      - name: tmp-dir
+        emptyDir: {}
+      containers:
+      - name: mcp-inspector
+        image: ghcr.io/modelcontextprotocol/inspector:latest
+        imagePullPolicy: Always
+        ports:
+        - name: inspector
+          containerPort: 6274
+          protocol: TCP
+        - name: inspector-ws
+          containerPort: 6277
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DANGEROUSLY_OMIT_AUTH
+          value: "true"
+        - name: PORT
+          value: "6274"
+        - name: PROXY_PORT
+          value: "6277"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: ALLOWED_ORIGINS
+          value: "https://mcp-inspector-mcp-inspector.apps.cluster-95nrt.95nrt.sandbox5429.opentlc.com,https://mcp-inspector-ws-mcp-inspector.apps.cluster-95nrt.95nrt.sandbox5429.opentlc.com"
+        - name: MCP_TRANSPORT
+          value: "sse"
+        - name: MCP_SERVER_URL
+          value: "http://ocp-mcp-server.llama-stack.svc.cluster.local:8000/sse"
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000940000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 6274
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 6274
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3

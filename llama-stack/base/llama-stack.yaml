@@ -1,0 +1,58 @@
+---
+apiVersion: llamastack.io/v1alpha1
+kind: LlamaStackDistribution
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"llamastack.io/v1alpha1","kind":"LlamaStackDistribution","metadata":{"annotations":{},"name":"llamastack-with-config","namespace":"default"},"spec":{"replicas":1,"server":{"containerSpec":{"port":8321},"distribution":{"name":"remote-vllm"},"userConfig":{"configMapName":"llama-stack-config"}}}}
+  name: llamastack-with-config
+spec:
+  replicas: 1
+  server:
+    containerSpec:
+      name: llama-stack
+      port: 8321
+      env:
+        - name: MAX_TOKENS
+          value: '128000'
+        - name: VLLM_MAX_TOKENS
+          value: '128000'
+        - name: LLAMA3B_URL
+          value: 'https://llama-3-2-3b-maas-apicast-production.apps.prod.rhoai.rh-aiservices-bu.com:443/v1'
+        - name: LLAMA3B_MODEL
+          value: llama-3-2-3b
+        - name: LLAMA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llama-stack-secret
+              key: llama-token
+        - name: LLAMA17B_URL
+          value: 'https://llama-4-scout-17b-16e-w4a16-maas-apicast-production.apps.prod.rhoai.rh-aiservices-bu.com:443/v1'
+        - name: LLAMA17B_MODEL
+          value: llama-4-scout-17b-16e-w4a16
+        - name: LLAMA17B_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llama-stack-secret
+              key: llama17b-token
+        - name: DEEPSEEK_URL
+          value: 'https://deepseek-r1-qwen-14b-w4a16-maas-apicast-production.apps.prod.rhoai.rh-aiservices-bu.com:443/v1'
+        - name: DEEPSEEK_MODEL
+          value: r1-qwen-14b-w4a16
+        - name: DEEPSEEK_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llama-stack-secret
+              key: deepseek-token
+        - name: VLLM_API_TOKEN
+          value: fake
+        - name: CUSTOM_TIKTOKEN_CACHE_DIR
+          value: /app/cache
+        - name: MILVUS_DB_PATH
+          value: milvus.db
+        - name: LLAMA_STACK_LOGGING
+          value: all=debug
+    distribution:
+      name: rh-dev
+    userConfig:
+      configMapName: llama-stack-config

@@ -1,0 +1,61 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: llama-stack-playground-build
+  namespace: llama-stack  # Update with your namespace
+  labels:
+    app: llama-stack-playground
+    component: build
+spec:
+  # Build triggers
+  triggers:
+    - type: ConfigChange
+    # Uncomment to trigger on image stream changes
+    # - type: ImageChange
+    #   imageChange: {}
+  
+  # Output configuration - push to quay.io
+  output:
+    to:
+      kind: DockerImage
+      name: quay.io/sudash/llama-stack-playground-new:latest  # Update with your quay.io username
+    pushSecret:
+      name: quay-io-push-secret
+  
+  # Resource limits for the build
+  resources:
+    limits:
+      cpu: "2"
+      memory: 4Gi
+    requests:
+      cpu: "1"
+      memory: 2Gi
+  
+  # Build history limits
+  successfulBuildsHistoryLimit: 3
+  failedBuildsHistoryLimit: 3
+  
+  # Docker build strategy
+  strategy:
+    type: Docker
+    dockerStrategy:
+      # Optional: Pull secret for base image if needed
+      # pullSecret:
+      #   name: quay-io-pull-secret
+      dockerfilePath: Containerfile
+  
+  # Source configuration
+  # Option 1: Binary source (build from local directory)
+  source:
+    type: Binary
+    binary: {}
+  
+  # Option 2: Git source (uncomment to use Git instead)
+  # source:
+  #   type: Git
+  #   git:
+  #     uri: https://github.com/your-org/llama-stack-playground.git
+  #     ref: main  # or your branch/tag
+  
+  runPolicy: Serial
+

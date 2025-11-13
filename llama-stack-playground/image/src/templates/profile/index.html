@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>👤 User Profile</h1>
+    
+    {% if not jwt_token %}
+    <div class="alert alert-info">
+        <h4>🔒 Authentication Status</h4>
+        <p>You are successfully authenticated via OAuth proxy!</p>
+        <p><strong>Note:</strong> JWT token details may not be accessible in the UI due to security restrictions.</p>
+        <p>The backend API can still access your authentication token automatically.</p>
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">User Information</div>
+                <div class="card-body">
+                    {% if token_data %}
+                    <p><strong>User ID:</strong> {{ token_data.get('sub', 'N/A') }}</p>
+                    <p><strong>Username:</strong> {{ token_data.get('preferred_username', token_data.get('username', 'N/A')) }}</p>
+                    <p><strong>Name:</strong> {{ token_data.get('name', 'N/A') }}</p>
+                    <p><strong>Email:</strong> {{ token_data.get('email', 'N/A') }}</p>
+                    {% if token_data.get('groups') %}
+                    <p><strong>Groups:</strong></p>
+                    <ul>
+                        {% for group in token_data.get('groups', []) %}
+                        <li>{{ group }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% else %}
+                    <p>Token data not available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">Token Details</div>
+                <div class="card-body">
+                    {% if token_data %}
+                    {% if token_data.get('exp') %}
+                    <p><strong>Expires At:</strong> 
+                        <script>
+                            document.write(new Date({{ token_data.get('exp') }} * 1000).toLocaleString());
+                        </script>
+                    </p>
+                    {% endif %}
+                    {% if token_data.get('iat') %}
+                    <p><strong>Issued At:</strong> 
+                        <script>
+                            document.write(new Date({{ token_data.get('iat') }} * 1000).toLocaleString());
+                        </script>
+                    </p>
+                    {% endif %}
+                    <details>
+                        <summary>View Full JWT Token</summary>
+                        <pre class="mt-2"><code>{{ jwt_token }}</code></pre>
+                    </details>
+                    <details>
+                        <summary>View Decoded Token Payload</summary>
+                        <pre class="mt-2"><code>{{ token_data|tojson(indent=2) }}</code></pre>
+                    </details>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="card mt-3">
+        <div class="card-header">Connection Status</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <p class="text-success">✅ <strong>Authenticated</strong></p>
+                    {% if token_data %}
+                    <p class="text-success">✅ <strong>Token Valid</strong></p>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <p><strong>Backend Endpoint:</strong><br>{{ endpoint }}</p>
+                </div>
+                <div class="col-md-4">
+                    <form method="POST" action="{{ url_for('profile.logout') }}">
+                        <button type="submit" class="btn btn-primary">🚪 Logout from Keycloak</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if headers %}
+    <div class="card mt-3">
+        <div class="card-header">Request Headers (Debug)</div>
+        <div class="card-body">
+            <details>
+                <summary>View All Request Headers</summary>
+                <pre class="mt-2"><code>{% for key, value in headers.items() %}{{ key }}: {{ value }}
+{% endfor %}</code></pre>
+            </details>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

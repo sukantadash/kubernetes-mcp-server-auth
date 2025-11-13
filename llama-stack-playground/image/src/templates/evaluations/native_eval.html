@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluations (Generation + Scoring) - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>📊 Evaluations (Generation + Scoring)</h1>
+    
+    <div class="card mb-3" id="step1">
+        <div class="card-header">1. Choose An Eval Task</div>
+        <div class="card-body">
+            <select class="form-select" id="benchmark-select">
+                <option value="">Select a benchmark</option>
+                {% for benchmark_id, benchmark in benchmarks.items() %}
+                <option value="{{ benchmark_id }}">{{ benchmark_id }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-primary mt-2" id="confirm-benchmark">Confirm</button>
+            <div id="benchmark-details" class="mt-3" style="display:none;"></div>
+        </div>
+    </div>
+    
+    <div class="card mb-3" id="step2" style="display:none;">
+        <div class="card-header">2. Define Eval Candidate</div>
+        <div class="card-body">
+            <select class="form-select mb-2" id="candidate-type">
+                <option value="model">Model</option>
+                <option value="agent">Agent</option>
+            </select>
+            <select class="form-select mb-2" id="candidate-model">
+                {% for model in models %}
+                <option value="{{ model }}">{{ model }}</option>
+                {% endfor %}
+            </select>
+            <div id="candidate-config"></div>
+            <button class="btn btn-primary mt-2" id="confirm-candidate">Confirm</button>
+        </div>
+    </div>
+    
+    <div class="card mb-3" id="step3" style="display:none;">
+        <div class="card-header">3. Run Evaluation</div>
+        <div class="card-body">
+            <input type="number" class="form-control mb-2" id="num-examples" min="1" value="5" placeholder="Number of Examples">
+            <button class="btn btn-success" id="run-eval-btn">Run Evaluation</button>
+            <div id="eval-results" class="mt-3"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedBenchmark = null;
+
+document.getElementById('confirm-benchmark').addEventListener('click', () => {
+    selectedBenchmark = document.getElementById('benchmark-select').value;
+    if (selectedBenchmark) {
+        fetch('{{ url_for("evaluations.native_eval") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: 'select_benchmark',
+                selected_benchmark: selectedBenchmark
+            })
+        }).then(() => {
+            document.getElementById('step2').style.display = 'block';
+        });
+    }
+});
+
+document.getElementById('confirm-candidate').addEventListener('click', () => {
+    const candidateType = document.getElementById('candidate-type').value;
+    const config = {
+        type: candidateType,
+        model: document.getElementById('candidate-model').value,
+        // Add other config parameters as needed
+    };
+    
+    fetch('{{ url_for("evaluations.native_eval") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            action: 'define_candidate',
+            eval_candidate: config
+        })
+    }).then(() => {
+        document.getElementById('step3').style.display = 'block';
+    });
+});
+
+document.getElementById('run-eval-btn').addEventListener('click', () => {
+    const numRows = parseInt(document.getElementById('num-examples').value);
+    
+    fetch('{{ url_for("evaluations.native_eval") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            action: 'run_evaluation',
+            num_rows: numRows
+        })
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const resultsDiv = document.getElementById('eval-results');
+        
+        function readChunk() {
+            reader.read().then(({done, value}) => {
+                if (done) return;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.progress !== undefined) {
+                                resultsDiv.innerHTML = `<div class="progress"><div class="progress-bar" style="width:${Math.round(data.progress*100)}%">${Math.round(data.progress*100)}%</div></div>`;
+                            }
+                            if (data.done && data.results) {
+                                const columns = data.columns;
+                                resultsDiv.innerHTML = '<table class="table"><thead><tr>' + 
+                                    columns.map(c => `<th>${c}</th>`).join('') + 
+                                    '</tr></thead><tbody>' +
+                                    data.results.map(row => '<tr>' + 
+                                        columns.map(c => `<td>${JSON.stringify(row[c])}</td>`).join('') + 
+                                        '</tr>').join('') +
+                                    '</tbody></table>';
+                            }
+                        } catch (e) {}
+                    }
+                }
+                readChunk();
+            });
+        }
+        readChunk();
+    });
+});
+</script>
+{% endblock %}
+

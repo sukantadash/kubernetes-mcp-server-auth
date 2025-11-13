@@ -1,0 +1,24 @@
+# Ignore sensitive secret files
+**/*secret*.yaml
+!**/*secret*.yaml.template
+!**/*secret*.template
+
+# Ignore generated certificate files
+*.crt
+*.key
+*.pem
+keycloak-ca.crt
+
+# Ignore generated files
+*.log
+.DS_Store
+
+# Ignore environment-specific files
+**/llama-stack-secret.yaml
+!**/llama-stack-secret.yaml.template
+
+# Ignore values files with actual secrets (keep templates)
+**/values-local.yaml
+**/values-prod.yaml
+**/values-secrets.yaml
+

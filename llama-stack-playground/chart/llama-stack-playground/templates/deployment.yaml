@@ -1,0 +1,214 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-stack-playground
+  labels:
+    {{- include "llama-stack-playground.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "llama-stack-playground.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "llama-stack-playground.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: llama-stack-playground
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        {{- if .Values.keycloak.enabled }}
+        # OAuth2-proxy for Keycloak OIDC authentication
+        - name: oauth-proxy
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4180
+              name: oauth-http
+          args:
+            - --provider=keycloak-oidc
+            - --client-id={{ .Values.keycloak.clientId }}
+            - --client-secret-file=/etc/oauth/client-secret
+            - --oidc-issuer-url={{ .Values.keycloak.url }}/realms/{{ .Values.keycloak.realm }}
+            {{- if .Values.keycloak.redirectUrl }}
+            - --redirect-url={{ .Values.keycloak.redirectUrl }}/oauth2/callback
+            {{- end }}
+            {{- if .Values.keycloak.scope }}
+            - --scope={{ .Values.keycloak.scope }}
+            {{- end }}
+            - --upstream=http://localhost:8501
+            - --http-address=0.0.0.0:4180
+            - --cookie-secret-file=/etc/oauth/cookie-secret
+            - --pass-access-token=true
+            - --pass-authorization-header=true
+            - --set-authorization-header=true
+            - --set-xauthrequest=true
+            - --user-id-claim=sub
+            - --oidc-groups-claim=groups
+            - --pass-user-headers=true
+            - --pass-basic-auth=false
+            - --cookie-secure=true
+            - --cookie-httponly=true
+            - --cookie-samesite=lax
+            - --skip-auth-regex=^/static
+            - --skip-auth-regex=^/oauth2
+            - --skip-auth-regex=^/health
+            - --skip-auth-regex=^/_stcore
+            - --email-domain=*
+            - --reverse-proxy=true
+            - --skip-provider-button=true
+            - --silence-ping-logging=true
+            - --show-debug-on-error=true
+            # Token refresh and expiration handling
+            # Set cookie expiration to match token expiration (15 min) so cookies expire before tokens
+            # This forces oauth-proxy to redirect when cookie expires, even if token is still technically valid
+            - --cookie-expire=15m
+            - --cookie-refresh=14m
+            # Enable PKCE for additional security (Keycloak supports it)
+            - --code-challenge-method=S256
+          volumeMounts:
+            - mountPath: /etc/oauth
+              name: oauth-config
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: oauth-http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: oauth-http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+        {{- else }}
+        # OpenShift OAuth proxy (default)
+        - name: oauth-proxy
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9@sha256:f55b6d17e2351b32406f72d0e877748b34456b18fcd8419f19ae1687d0dce294
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+              name: public
+          args:
+            - --https-address=:8443
+            - --provider=openshift
+            - --openshift-service-account=llama-stack-playground
+            - --upstream=http://localhost:8501
+            - --tls-cert=/etc/tls/private/tls.crt
+            - --tls-key=/etc/tls/private/tls.key
+            - --cookie-secret=SECRET
+          volumeMounts:
+            - mountPath: /etc/tls/private
+              name: proxy-tls
+        {{- end }}
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - containerPort: 8501
+            name: http
+            protocol: TCP
+          volumeMounts:
+          - name: session-storage
+            mountPath: /app/sessions
+          - name: log-storage
+            mountPath: /app/logs
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            - name: LLAMA_STACK_ENDPOINT
+              value: {{ .Values.playground.llamaStackUrl | quote }}
+            - name: DEFAULT_MODEL
+              value: {{ .Values.playground.defaultModel | quote }}
+            - name: FLASK_SECRET_KEY
+              {{- if .Values.playground.flaskSecretKey }}
+              value: {{ .Values.playground.flaskSecretKey | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: llama-stack-playground-secret
+                  key: flask-secret-key
+                  optional: true
+              {{- end }}
+            - name: SESSION_DIR
+              value: "/app/sessions"
+            - name: LOG_DIR
+              value: "/app/logs"
+            {{- if .Values.keycloak.enabled }}
+            - name: KEYCLOAK_URL
+              value: {{ .Values.keycloak.url | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ .Values.keycloak.realm | quote }}
+            - name: APP_URL
+              value: {{ .Values.keycloak.redirectUrl | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      {{- if not .Values.keycloak.enabled }}
+      - name: proxy-tls
+        secret:
+          secretName: proxy-tls
+      {{- else }}
+      - name: oauth-config
+        secret:
+          secretName: oauth-config
+      {{- end }}
+      - name: session-storage
+        emptyDir: {}
+      - name: log-storage
+        emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

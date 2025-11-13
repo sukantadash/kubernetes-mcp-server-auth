@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Llama Stack Playground{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sidebar-config {
+        margin-bottom: 20px;
+    }
+    #chat-messages {
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 20px;
+        margin-bottom: 20px;
+        background: white;
+        border-radius: 10px;
+    }
+    #chat-messages .message {
+        margin-bottom: 15px;
+        padding: 10px;
+        border-radius: 8px;
+        max-width: 100%;
+    }
+    #chat-messages .message.user {
+        background-color: #e3f2fd;
+        margin-left: 0;
+        margin-right: 0;
+        text-align: left;
+    }
+    #chat-messages .message.assistant {
+        background-color: #f5f5f5;
+        margin-left: 0;
+        margin-right: auto;
+        text-align: left;
+    }
+    #chat-messages .message div {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-width: 100%;
+        overflow-x: auto;
+        text-align: inherit;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar Configuration -->
+        <div class="col-md-3">
+            <div class="card sidebar-config">
+                <div class="card-header">
+                    <h5>Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="config-form">
+                        <div class="mb-3">
+                            <label for="model-select" class="form-label">Choose a model</label>
+                            <select class="form-select" id="model-select" name="model">
+                                {% for model in models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="temperature" class="form-label">Temperature: <span id="temp-value">0.0</span></label>
+                            <input type="range" class="form-range" id="temperature" min="0" max="1" step="0.1" value="0.0">
+                        </div>
+                        <div class="mb-3">
+                            <label for="top_p" class="form-label">Top P: <span id="topp-value">0.95</span></label>
+                            <input type="range" class="form-range" id="top_p" min="0" max="1" step="0.1" value="0.95">
+                        </div>
+                        <div class="mb-3">
+                            <label for="max_tokens" class="form-label">Max Tokens: <span id="maxtokens-value">512</span></label>
+                            <input type="range" class="form-range" id="max_tokens" min="0" max="4096" step="1" value="512">
+                        </div>
+                        <div class="mb-3">
+                            <label for="repetition_penalty" class="form-label">Repetition Penalty: <span id="reppenalty-value">1.0</span></label>
+                            <input type="range" class="form-range" id="repetition_penalty" min="1.0" max="2.0" step="0.1" value="1.0">
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="stream" checked>
+                            <label class="form-check-label" for="stream">Stream</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="system_prompt" class="form-label">System Prompt</label>
+                            <textarea class="form-control" id="system_prompt" rows="3">You are a helpful AI assistant.</textarea>
+                        </div>
+                        <button type="button" class="btn btn-secondary w-100" id="clear-chat-btn">Clear Chat</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="col-md-9">
+            <h1>🦙 Chat</h1>
+            <div id="chat-messages" class="chat-messages" style="max-height: 600px; overflow-y: auto; padding: 20px; margin-bottom: 20px; background: white; border-radius: 10px;">
+                {% for message in messages %}
+                <div class="message {{ message.role }}">
+                    <strong>{{ message.role|title }}:</strong>
+                    <div style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">{{ message.content|safe }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="input-group">
+                <input type="text" class="form-control" id="chat-input" placeholder="Example: What is Llama Stack?">
+                <button class="btn btn-primary" id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update value displays
+    document.getElementById('temperature').addEventListener('input', (e) => {
+        document.getElementById('temp-value').textContent = e.target.value;
+    });
+    document.getElementById('top_p').addEventListener('input', (e) => {
+        document.getElementById('topp-value').textContent = e.target.value;
+    });
+    document.getElementById('max_tokens').addEventListener('input', (e) => {
+        document.getElementById('maxtokens-value').textContent = e.target.value;
+    });
+    document.getElementById('repetition_penalty').addEventListener('input', (e) => {
+        document.getElementById('reppenalty-value').textContent = e.target.value;
+    });
+
+    function addMessage(role, content) {
+        const messagesDiv = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
+        const roleTitle = role.charAt(0).toUpperCase() + role.slice(1);
+        messageDiv.innerHTML = `<strong>${roleTitle}:</strong><div>${content}</div>`;
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const prompt = input.value.trim();
+        if (!prompt) return;
+
+        addMessage('user', prompt);
+        input.value = '';
+
+        const config = {
+            prompt: prompt,
+            model_id: document.getElementById('model-select').value,
+            temperature: parseFloat(document.getElementById('temperature').value),
+            top_p: parseFloat(document.getElementById('top_p').value),
+            max_tokens: parseInt(document.getElementById('max_tokens').value),
+            repetition_penalty: parseFloat(document.getElementById('repetition_penalty').value),
+            system_prompt: document.getElementById('system_prompt').value,
+            stream: document.getElementById('stream').checked
+        };
+
+        if (config.stream) {
+            const messagesDiv = document.getElementById('chat-messages');
+            const placeholderDiv = document.createElement('div');
+            placeholderDiv.className = 'message assistant';
+            placeholderDiv.innerHTML = '<strong>Assistant:</strong><div id="streaming-content" style="white-space: pre-wrap; word-wrap: break-word;">...</div>';
+            messagesDiv.appendChild(placeholderDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            fetch('{{ url_for("playground.chat") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            }).then(response => {
+                if (!response.ok) {
+                    // Handle non-200 responses
+                    return response.json().then(data => {
+                        addMessage('assistant', `Error: ${data.error || 'Request failed'}`);
+                        const streamingContent = document.getElementById('streaming-content');
+                        if (streamingContent) {
+                            streamingContent.parentElement.remove();
+                        }
+                    }).catch(() => {
+                        addMessage('assistant', `Error: ${response.status} ${response.statusText}`);
+                        const streamingContent = document.getElementById('streaming-content');
+                        if (streamingContent) {
+                            streamingContent.parentElement.remove();
+                        }
+                    });
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                const streamingContent = document.getElementById('streaming-content');
+
+                let fullContent = '';
+                function readChunk() {
+                    reader.read().then(({done, value}) => {
+                        if (done) {
+                            streamingContent.textContent = fullContent;
+                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            return;
+                        }
+                        const chunk = decoder.decode(value, {stream: true});
+                        const lines = chunk.split('\n');
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.substring(6));
+                                    if (data.error) {
+                                        streamingContent.textContent = `Error: ${data.error}`;
+                                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                        return;
+                                    }
+                                    if (data.content !== undefined) {
+                                        fullContent = data.content;
+                                        streamingContent.textContent = fullContent + (data.done ? '' : '▌');
+                                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                    }
+                                    if (data.done) {
+                                        streamingContent.textContent = fullContent;
+                                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                        return;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing SSE data:', e);
+                                }
+                            }
+                        }
+                        readChunk();
+                    }).catch(err => {
+                        console.error('Error reading stream:', err);
+                        streamingContent.textContent = `Error: ${err.message}`;
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    });
+                }
+                readChunk();
+            }).catch(err => {
+                console.error('Error sending request:', err);
+                addMessage('assistant', `Error: ${err.message}`);
+                const streamingContent = document.getElementById('streaming-content');
+                if (streamingContent) {
+                    streamingContent.parentElement.remove();
+                }
+            });
+        } else {
+            fetch('{{ url_for("playground.chat") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || `Request failed: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    addMessage('assistant', `Error: ${data.error}`);
+                } else {
+                    addMessage('assistant', data.content);
+                }
+            })
+            .catch(err => {
+                console.error('Error sending request:', err);
+                addMessage('assistant', `Error: ${err.message}`);
+            });
+        }
+    }
+
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    document.getElementById('clear-chat-btn').addEventListener('click', () => {
+        fetch('{{ url_for("playground.clear_chat") }}', {method: 'POST'})
+            .then(() => {
+                document.getElementById('chat-messages').innerHTML = '';
+            });
+    });
+</script>
+{% endblock %}
+

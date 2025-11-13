@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Tools - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header"><h5>Configuration</h5></div>
+                <div class="card-body">
+                    <label class="form-label">Model</label>
+                    <select class="form-select mb-3" id="model-select">
+                        {% for model in models %}
+                        <option value="{{ model }}">{{ model }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="form-label">Built-in Tools</label>
+                    <div id="builtin-tools" class="mb-3">
+                        {% for tool in builtin_tools %}
+                        <div class="form-check">
+                            <input class="form-check-input tool-checkbox" type="checkbox" value="{{ tool }}" id="tool-{{ loop.index }}">
+                            <label class="form-check-label" for="tool-{{ loop.index }}">{{ tool.split('::')[1:]|join('') }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <label class="form-label">MCP Servers</label>
+                    <div id="mcp-tools" class="mb-3">
+                        {% for tool in mcp_tools %}
+                        <div class="form-check">
+                            <input class="form-check-input tool-checkbox" type="checkbox" value="{{ tool }}" id="mcp-{{ loop.index }}">
+                            <label class="form-check-label" for="mcp-{{ loop.index }}">{{ tool.split('::')[1:]|join('') }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div id="active-tools-info" class="mb-3" style="display:none;">
+                        <strong>Active Tools: 🛠 <span id="total-tools-count">0</span></strong>
+                        <div id="tools-list" class="mt-2"></div>
+                    </div>
+                    <div id="rag-vector-dbs" style="display:none;" class="mb-3">
+                        <label class="form-label">Select Document Collections</label>
+                        <select class="form-select" id="vector-dbs-select" multiple></select>
+                    </div>
+                    <label class="form-label">Agent Type</label>
+                    <select class="form-select mb-2" id="agent-type">
+                        <option value="Regular">Regular</option>
+                        <option value="ReAct">ReAct</option>
+                    </select>
+                    <label class="form-label">Max Tokens: <span id="maxtokens-val">512</span></label>
+                    <input type="range" class="form-range mb-3" id="max-tokens" min="0" max="4096" step="64" value="512">
+                    <label class="form-label">OpenShift Token (Optional)</label>
+                    <input type="password" class="form-control mb-3" id="openshift-token" placeholder="Enter OpenShift token for MCP servers">
+                    <small class="form-text text-muted mb-3">If provided, this token will be used for MCP server authentication instead of JWT token.</small>
+                    <button class="btn btn-secondary w-100" id="clear-tools-btn">Clear Chat</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <h1>🛠 Tools</h1>
+            <div id="tools-messages" class="chat-messages" style="max-height: 600px; overflow-y: auto; padding: 20px; margin-bottom: 20px; background: white; border-radius: 10px;">
+                {% for message in messages %}
+                <div class="message {{ message.role }}">
+                    <strong>{{ message.role|title }}:</strong>
+                    <div style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">{{ message.content|safe }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="input-group">
+                <input type="text" class="form-control" id="tools-input" placeholder="">
+                <button class="btn btn-primary" id="send-tools-btn">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.getElementById('max-tokens').addEventListener('input', (e) => {
+    document.getElementById('maxtokens-val').textContent = e.target.value;
+});
+
+// Show vector DBs when RAG tool is selected and update tools list
+function updateToolsList() {
+    const selectedToolgroups = Array.from(document.querySelectorAll('.tool-checkbox:checked')).map(c => c.value);
+    
+    if (selectedToolgroups.length === 0) {
+        document.getElementById('active-tools-info').style.display = 'none';
+        return;
+    }
+    
+    // Show/hide RAG vector DBs
+    const ragSelected = selectedToolgroups.includes('builtin::rag');
+    document.getElementById('rag-vector-dbs').style.display = ragSelected ? 'block' : 'none';
+    if (ragSelected) {
+        fetch('{{ url_for("playground.get_vector_dbs") }}')
+            .then(r => r.json())
+            .then(data => {
+                const select = document.getElementById('vector-dbs-select');
+                select.innerHTML = data.vector_dbs.map(vdb => `<option value="${vdb}">${vdb}</option>`).join('');
+            });
+    }
+    
+    // Fetch and display tools for selected toolgroups
+    fetch('{{ url_for("playground.get_tools") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({toolgroup_ids: selectedToolgroups})
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('total-tools-count').textContent = data.total_tools;
+        document.getElementById('active-tools-info').style.display = 'block';
+        
+        const toolsListDiv = document.getElementById('tools-list');
+        toolsListDiv.innerHTML = '';
+        
+        for (const [groupId, tools] of Object.entries(data.grouped_tools)) {
+            if (tools.length > 0) {
+                const groupDiv = document.createElement('details');
+                groupDiv.className = 'mb-2';
+                groupDiv.innerHTML = `
+                    <summary style="cursor: pointer;">🔧 Tools from <code>${groupId}</code></summary>
+                    <ul class="mt-2">
+                        ${tools.map((tool, idx) => `<li>${idx + 1}. <code>${tool.split(':').pop()}</code></li>`).join('')}
+                    </ul>
+                `;
+                toolsListDiv.appendChild(groupDiv);
+            }
+        }
+    });
+}
+
+// Show vector DBs when RAG tool is selected
+document.querySelectorAll('.tool-checkbox').forEach(cb => {
+    cb.addEventListener('change', updateToolsList);
+});
+
+document.getElementById('send-tools-btn').addEventListener('click', () => {
+    const prompt = document.getElementById('tools-input').value.trim();
+    if (!prompt) return;
+    
+    const messagesDiv = document.getElementById('tools-messages');
+    const userMsg = document.createElement('div');
+    userMsg.className = 'message user';
+    userMsg.innerHTML = `<strong>User:</strong><div>${prompt}</div>`;
+    messagesDiv.appendChild(userMsg);
+    document.getElementById('tools-input').value = '';
+    
+    const selectedTools = Array.from(document.querySelectorAll('.tool-checkbox:checked')).map(c => c.value);
+    const openshiftToken = document.getElementById('openshift-token').value.trim();
+    const config = {
+        prompt: prompt,
+        model: document.getElementById('model-select').value,
+        toolgroup_selection: selectedTools,
+        selected_vector_dbs: Array.from(document.getElementById('vector-dbs-select').selectedOptions).map(o => o.value),
+        agent_type: document.getElementById('agent-type').value,
+        max_tokens: parseInt(document.getElementById('max-tokens').value),
+        openshift_token: openshiftToken || null
+    };
+    
+    // Create a unique ID for this assistant message to avoid conflicts
+    const assistantMsgId = 'assistant-msg-' + Date.now();
+    const streamingContentId = 'streaming-tools-' + Date.now();
+    
+    const assistantMsg = document.createElement('div');
+    assistantMsg.className = 'message assistant';
+    assistantMsg.id = assistantMsgId;
+    assistantMsg.innerHTML = `<strong>Assistant:</strong><div id="${streamingContentId}"><span class="loading"></span> Processing...</div>`;
+    messagesDiv.appendChild(assistantMsg);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    let hasResponse = false;
+    const startTime = Date.now();
+    const timeout = 120000; // 2 minutes timeout
+    
+    fetch('{{ url_for("playground.tools") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const streamingContent = document.getElementById(streamingContentId);
+        let accumulatedContent = '';
+        let isComplete = false;
+        
+        function readChunk() {
+            reader.read().then(({done, value}) => {
+                if (done) {
+                    if (!hasResponse && accumulatedContent === '') {
+                        streamingContent.innerHTML = '<span style="color: orange;">No response received. The agent may still be processing or there may be an issue. Check server logs for details.</span>';
+                    } else {
+                        // Ensure final content is displayed without cursor
+                        streamingContent.textContent = accumulatedContent;
+                    }
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    return;
+                }
+                
+                // Check timeout
+                if (Date.now() - startTime > timeout) {
+                    streamingContent.innerHTML = '<span style="color: orange;">Request timed out. The operation may still be processing on the server.</span>';
+                    return;
+                }
+                
+                const chunk = decoder.decode(value, {stream: true});
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            
+                            if (data.error) {
+                                hasResponse = true;
+                                isComplete = true;
+                                const errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error, null, 2);
+                                streamingContent.innerHTML = `<span style="color: red;">Error: ${errorMsg}</span>`;
+                                if (typeof data.error === 'object' && data.error.traceback) {
+                                    const tracebackDiv = document.createElement('details');
+                                    tracebackDiv.className = 'mt-2';
+                                    tracebackDiv.innerHTML = `<summary style="cursor: pointer; color: red;">Show Traceback</summary><pre style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">${data.error.traceback}</pre>`;
+                                    assistantMsg.appendChild(tracebackDiv);
+                                }
+                                if (data.done) break;
+                            }
+                            
+                            // Handle content updates - backend sends accumulated content
+                            if (data.content !== undefined && data.content !== null) {
+                                hasResponse = true;
+                                // Backend sends full accumulated content so far
+                                accumulatedContent = String(data.content);
+                                // Update display with full accumulated content
+                                if (!isComplete && !data.done) {
+                                    // Show cursor during streaming
+                                    streamingContent.style.whiteSpace = 'pre-wrap';
+                                    streamingContent.style.wordWrap = 'break-word';
+                                    streamingContent.style.maxWidth = '100%';
+                                    streamingContent.style.overflowX = 'auto';
+                                    streamingContent.textContent = accumulatedContent + '▌';
+                                } else {
+                                    streamingContent.style.whiteSpace = 'pre-wrap';
+                                    streamingContent.style.wordWrap = 'break-word';
+                                    streamingContent.style.maxWidth = '100%';
+                                    streamingContent.style.overflowX = 'auto';
+                                    streamingContent.textContent = accumulatedContent;
+                                }
+                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            }
+                            
+                            // Handle ReAct specific data - only add once
+                            if (data.thought) {
+                                // Check if we already have this thought element
+                                let thoughtDiv = assistantMsg.querySelector('.react-thought');
+                                if (!thoughtDiv) {
+                                    thoughtDiv = document.createElement('details');
+                                    thoughtDiv.className = 'mt-2 react-thought';
+                                    thoughtDiv.innerHTML = `<summary style="cursor: pointer; color: #666;">🤔 Thinking...</summary><div style="color: #666; font-style: italic; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(data.thought)}</div>`;
+                                    assistantMsg.insertBefore(thoughtDiv, streamingContent.parentElement);
+                                } else {
+                                    // Update existing thought
+                                    const thoughtContent = thoughtDiv.querySelector('div');
+                                    if (thoughtContent) {
+                                        thoughtContent.textContent = data.thought;
+                                    }
+                                }
+                            }
+                            
+                            if (data.action) {
+                                // Check if we already have this action element
+                                let actionDiv = assistantMsg.querySelector('.react-action');
+                                if (!actionDiv) {
+                                    actionDiv = document.createElement('details');
+                                    actionDiv.className = 'mt-2 react-action';
+                                    actionDiv.innerHTML = `<summary style="cursor: pointer;">🛠 Action: Using tool "${escapeHtml(data.action.tool_name || 'unknown')}"</summary><pre style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">${escapeHtml(JSON.stringify(data.action.tool_params, null, 2))}</pre>`;
+                                    assistantMsg.insertBefore(actionDiv, streamingContent.parentElement);
+                                }
+                            }
+                            
+                            if (data.tool_result) {
+                                const [toolName, content] = data.tool_result;
+                                // Check if we already have a result for this tool (avoid duplicates)
+                                const existingResult = assistantMsg.querySelector(`.tool-result[data-tool-name="${escapeHtml(toolName)}"]`);
+                                if (!existingResult) {
+                                    const toolResultDiv = document.createElement('details');
+                                    toolResultDiv.className = 'mt-2 tool-result';
+                                    toolResultDiv.setAttribute('data-tool-name', toolName);
+                                    try {
+                                        const parsedContent = JSON.parse(content);
+                                        toolResultDiv.innerHTML = `<summary style="cursor: pointer;">⚙️ Observation (Result from "${escapeHtml(toolName)}")</summary><pre style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">${escapeHtml(JSON.stringify(parsedContent, null, 2))}</pre>`;
+                                    } catch {
+                                        // Content is not JSON, display as-is
+                                        toolResultDiv.innerHTML = `<summary style="cursor: pointer;">⚙️ Observation (Result from "${escapeHtml(toolName)}")</summary><pre style="white-space: pre-wrap; word-wrap: break-word; max-width: 100%; overflow-x: auto;">${escapeHtml(String(content))}</pre>`;
+                                    }
+                                    assistantMsg.insertBefore(toolResultDiv, streamingContent.parentElement);
+                                }
+                            }
+                            
+                            // Handle regular tool info
+                            if (data.tool_info) {
+                                const toolInfo = document.createElement('div');
+                                toolInfo.className = 'text-muted small mt-1';
+                                toolInfo.textContent = '🛠 ' + data.tool_info;
+                                assistantMsg.appendChild(toolInfo);
+                            }
+                            
+                            if (data.done) {
+                                hasResponse = true;
+                                isComplete = true;
+                                streamingContent.textContent = accumulatedContent;
+                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('Error parsing SSE data:', e);
+                        }
+                    }
+                }
+                readChunk();
+            });
+        }
+        readChunk();
+    }).catch(error => {
+        console.error('Fetch error:', error);
+        streamingContent.innerHTML = `<span style="color: red;">Network Error: ${error.message}. Please check your connection and try again.</span>`;
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
+});
+
+document.getElementById('clear-tools-btn').addEventListener('click', () => {
+    fetch('{{ url_for("playground.clear_tools") }}', {method: 'POST'})
+        .then(() => location.reload());
+});
+</script>
+{% endblock %}
+

@@ -1,0 +1,24 @@
+{{- if .Values.keycloak.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-stack-playground-keycloak-config
+  labels:
+    {{- include "llama-stack-playground.labels" . | nindent 4 }}
+data:
+  keycloak-url: "{{ .Values.keycloak.url }}"
+  keycloak-realm: "{{ .Values.keycloak.realm }}"
+  keycloak-client-id: "{{ .Values.keycloak.clientId }}"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llama-stack-playground-keycloak-secret
+  labels:
+    {{- include "llama-stack-playground.labels" . | nindent 4 }}
+type: Opaque
+data:
+  client-secret: {{ .Values.keycloak.clientSecret | b64enc }}
+{{- end }}
+

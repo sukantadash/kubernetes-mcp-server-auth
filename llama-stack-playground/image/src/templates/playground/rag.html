@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}RAG - Llama Stack Playground{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Upload Documents</h6>
+                    <form id="upload-form" enctype="multipart/form-data">
+                        <input type="file" class="form-control mb-2" id="file-input" multiple accept=".txt,.pdf,.doc,.docx">
+                        <input type="text" class="form-control mb-2" id="vector-db-name" placeholder="Document Collection Name" value="rag_vector_db">
+                        <button type="submit" class="btn btn-primary w-100">Create Document Collection</button>
+                    </form>
+                    <hr>
+                    <h6>RAG Parameters</h6>
+                    <select class="form-select mb-3" id="rag-mode">
+                        <option value="Direct">Direct</option>
+                        <option value="Agent-based">Agent-based</option>
+                    </select>
+                    <label class="form-label">Select Document Collections</label>
+                    <select class="form-select mb-3" id="vector-dbs" multiple>
+                        {% for vdb in vector_dbs %}
+                        <option value="{{ vdb }}">{{ vdb }}</option>
+                        {% endfor %}
+                    </select>
+                    <h6>Inference Parameters</h6>
+                    <select class="form-select mb-2" id="model-select">
+                        {% for model in models %}
+                        <option value="{{ model }}">{{ model }}</option>
+                        {% endfor %}
+                    </select>
+                    <textarea class="form-control mb-2" id="system-prompt" rows="2">You are a helpful assistant.</textarea>
+                    <label class="form-label">Temperature: <span id="temp-val">0.0</span></label>
+                    <input type="range" class="form-range mb-2" id="temperature" min="0" max="1" step="0.1" value="0.0">
+                    <label class="form-label">Top P: <span id="topp-val">0.95</span></label>
+                    <input type="range" class="form-range mb-2" id="top-p" min="0" max="1" step="0.1" value="0.95">
+                    <button class="btn btn-secondary w-100 mt-2" id="clear-rag-btn">Clear Chat</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <h1>🦙 RAG</h1>
+            <div id="rag-messages" class="chat-messages" style="max-height: 600px; overflow-y: auto; padding: 20px; margin-bottom: 20px; background: white; border-radius: 10px;">
+                {% for message in messages %}
+                <div class="message {{ message.role }}">
+                    <strong>{{ message.role|title }}:</strong>
+                    <div>{{ message.content|safe }}</div>
+                    {% if message.tool_output %}
+                    <details class="mt-2"><summary>Tool Output</summary><pre>{{ message.tool_output }}</pre></details>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="input-group">
+                <input type="text" class="form-control" id="rag-input" placeholder="Ask a question about your documents">
+                <button class="btn btn-primary" id="send-rag-btn">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('temperature').addEventListener('input', (e) => {
+    document.getElementById('temp-val').textContent = e.target.value;
+});
+document.getElementById('top-p').addEventListener('input', (e) => {
+    document.getElementById('topp-val').textContent = e.target.value;
+});
+
+document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    const files = document.getElementById('file-input').files;
+    for (let file of files) {
+        formData.append('files', file);
+    }
+    formData.append('vector_db_name', document.getElementById('vector-db-name').value);
+    
+    const response = await fetch('{{ url_for("playground.rag") }}', {
+        method: 'POST',
+        body: formData
+    });
+    const result = await response.json();
+    if (result.success) {
+        alert('Document collection created successfully!');
+        location.reload();
+    } else {
+        alert('Error: ' + result.error);
+    }
+});
+
+document.getElementById('send-rag-btn').addEventListener('click', () => {
+    const prompt = document.getElementById('rag-input').value.trim();
+    if (!prompt) return;
+    
+    // Add user message
+    const messagesDiv = document.getElementById('rag-messages');
+    const userMsg = document.createElement('div');
+    userMsg.className = 'message user';
+    userMsg.innerHTML = `<strong>User:</strong><div>${prompt}</div>`;
+    messagesDiv.appendChild(userMsg);
+    document.getElementById('rag-input').value = '';
+    
+    const config = {
+        prompt: prompt,
+        rag_mode: document.getElementById('rag-mode').value,
+        selected_vector_dbs: Array.from(document.getElementById('vector-dbs').selectedOptions).map(o => o.value),
+        selected_model: document.getElementById('model-select').value,
+        temperature: parseFloat(document.getElementById('temperature').value),
+        top_p: parseFloat(document.getElementById('top-p').value),
+        system_prompt: document.getElementById('system-prompt').value
+    };
+    
+    const assistantMsg = document.createElement('div');
+    assistantMsg.className = 'message assistant';
+    assistantMsg.innerHTML = '<strong>Assistant:</strong><div id="streaming-rag">...</div>';
+    messagesDiv.appendChild(assistantMsg);
+    
+    fetch('{{ url_for("playground.rag_query") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const streamingContent = document.getElementById('streaming-rag');
+        
+        function readChunk() {
+            reader.read().then(({done, value}) => {
+                if (done) return;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.content !== undefined) {
+                                streamingContent.textContent = data.content + (data.done ? '' : '▌');
+                            }
+                            if (data.context) {
+                                if (!assistantMsg.querySelector('details')) {
+                                    const details = document.createElement('details');
+                                    details.className = 'mt-2';
+                                    details.innerHTML = `<summary>Retrieval Output</summary><pre>${data.context}</pre>`;
+                                    assistantMsg.appendChild(details);
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+                readChunk();
+            });
+        }
+        readChunk();
+    });
+});
+
+document.getElementById('clear-rag-btn').addEventListener('click', () => {
+    fetch('{{ url_for("playground.clear_rag") }}', {method: 'POST'})
+        .then(() => location.reload());
+});
+</script>
+{% endblock %}
+
