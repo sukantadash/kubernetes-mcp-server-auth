@@ -561,3 +561,23 @@ All configuration files use template files with `${VARIABLE}` placeholders:
 
 ## Demo
 
+### Video Demonstration
+
+Watch the video demonstration of the Kubernetes MCP Server OAuth setup:
+
+<video width="800" controls>
+  <source src="daigram/2025-11-13%2016-01-01.mov" type="video/quicktime">
+  Your browser does not support the video tag.
+</video>
+
+**Alternative**: [Download the demo video](daigram/2025-11-13%2016-01-01.mov)
+
+### What the Demo Shows
+
+The video demonstrates:
+- Keycloak deployment and configuration
+- OAuth authentication flow
+- Token exchange process
+- User context operations in Kubernetes
+- Llama Stack Playground integration
+
